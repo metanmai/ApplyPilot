@@ -25,15 +25,19 @@ SCORE_PROMPT = """You are a job fit evaluator. Given a candidate's resume and a 
 SCORING CRITERIA:
 - 9-10: Perfect match. Candidate has direct experience in nearly all required skills and qualifications.
 - 7-8: Strong match. Candidate has most required skills, minor gaps easily bridged.
-- 5-6: Moderate match. Candidate has some relevant skills but missing key requirements.
-- 3-4: Weak match. Significant skill gaps, would need substantial ramp-up.
-- 1-2: Poor match. Completely different field or experience level.
+- 5-6: Moderate match. Candidate has relevant skills and can grow into the role.
+- 3-4: Weak match. Some skills overlap, but significant gaps exist.
+- 1-2: Poor match. Completely different field or fundamental misalignment.
 
-IMPORTANT FACTORS:
-- Weight technical skills heavily (programming languages, frameworks, tools)
-- Consider transferable experience (automation, scripting, API work)
-- Factor in the candidate's project experience
-- Be realistic about experience level vs. job requirements (years of experience, seniority)
+IMPORTANT FACTORS - BE LENIENT:
+- Weight TECHNICAL SKILLS and TECH STACK above all else (languages, frameworks, tools)
+- Job requirements are often wish lists, not hard requirements — score based on core skills, not nice-to-haves
+- 2+ years of professional experience is VIABLE for mid-level roles if skills match
+- Value DEMONSTRATED IMPACT over years on the job (e.g., cost savings, performance improvements, ownership)
+- Consider transferable experience (automation, scripting, API work, distributed systems)
+- Factor in the candidate's project experience and internship work
+- Be LENIENT about experience level gaps — focus on whether the candidate CAN do the job, not whether they check every box
+- High-performers often grow faster than their years suggest — recognize potential
 
 RESPOND IN EXACTLY THIS FORMAT (no other text):
 SCORE: [1-10]
@@ -94,7 +98,7 @@ def score_job(resume_text: str, job: dict) -> dict:
 
     try:
         client = get_client()
-        response = client.chat(messages, max_tokens=512, temperature=0.2)
+        response = client.chat(messages, max_tokens=2048, temperature=0.2)
         return _parse_score_response(response)
     except Exception as e:
         log.error("LLM error scoring job '%s': %s", job.get("title", "?"), e)
@@ -147,10 +151,24 @@ def run_scoring(limit: int = 0, rescore: bool = False) -> dict:
 
         results.append(result)
 
-        log.info(
-            "[%d/%d] score=%d  %s",
-            completed, len(jobs), result["score"], job.get("title", "?")[:60],
-        )
+        # Clean, readable log format with job details
+        score_emoji = {9: "🟢", 8: "🟢", 7: "✅", 6: "📊", 5: "📊", 4: "🟡", 3: "🟡", 2: "🔴", 1: "🔴", 0: "⚫"}
+        emoji = score_emoji.get(result["score"], "⚪")
+
+        log.info("")
+        log.info("=" * 70)
+        log.info("│ [%d/%d] score=%d %s", completed, len(jobs), result["score"], emoji)
+        log.info("│ Title:      %s", job.get("title", "?"))
+        log.info("│ Company:    %s", job.get("site", "Unknown"))
+        location = job.get("location", "N/A")
+        if location and location != "N/A":
+            log.info("│ Location:   %s", location[:50])
+        if result["keywords"]:
+            log.info("│ Keywords:   %s", result["keywords"])
+        log.info("│ Reasoning:  %s", result["reasoning"][:150])
+        if len(result["reasoning"]) > 150:
+            log.info("│             %s", result["reasoning"][150:300])
+        log.info("=" * 70)
 
     # Write scores to DB
     now = datetime.now(timezone.utc).isoformat()

@@ -181,7 +181,10 @@ class LLMClient:
     def _handle_compat_response(resp: httpx.Response) -> str:
         resp.raise_for_status()
         data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        message = data["choices"][0]["message"]
+        # GLM and some reasoning models return content in reasoning_content field
+        content = message.get("content") or message.get("reasoning_content", "")
+        return content
 
     # -- public API ---------------------------------------------------------
 
