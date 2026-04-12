@@ -105,6 +105,32 @@ def score_job(resume_text: str, job: dict) -> dict:
         return {"score": 0, "keywords": "", "reasoning": f"LLM error: {e}"}
 
 
+def score_and_commit(job: dict) -> dict:
+    """Score a single job and commit immediately.
+
+    Args:
+        job: Job dict with keys: title, site, location, full_description, url.
+
+    Returns:
+        {"score": int, "keywords": str, "reasoning": str}
+    """
+    # Get resume text
+    resume_text = RESUME_PATH.read_text(encoding="utf-8")
+
+    # Score using existing logic
+    result = score_job(resume_text, job)
+
+    # Commit immediately
+    conn = get_connection()
+    conn.execute(
+        "UPDATE jobs SET fit_score = ?, score_reasoning = ?, scored_at = ? WHERE url = ?",
+        (result['score'], f"{result['keywords']}\n{result['reasoning']}", datetime.now(timezone.utc).isoformat(), job['url'])
+    )
+    conn.commit()
+
+    return result
+
+
 def run_scoring(limit: int = 0, rescore: bool = False) -> dict:
     """Score unscored jobs that have full descriptions.
 
